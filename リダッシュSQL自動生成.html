@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redash SQL Assistant – Shuuumatu Worker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2330;
+    --border: #30363d;
+    --accent: #f0a500;
+    --accent2: #e06c00;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+  }
+  .logo svg { flex-shrink: 0; }
+  .header-sub { font-size: 12px; color: var(--text2); margin-left: auto; }
+
+  /* ── Layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Schema Sidebar ── */
+  .sidebar {
+    width: 240px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text2);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .schema-search {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .schema-search input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+  }
+  .schema-search input:focus { border-color: var(--accent); }
+  .schema-search input::placeholder { color: var(--text2); }
+  .table-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+  .table-item {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text2);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.1s, color 0.1s;
+  }
+  .table-item:hover { background: var(--surface2); color: var(--blue); }
+  .table-item.active { background: var(--surface2); color: var(--accent); }
+
+  /* ── Chat Area ── */
+  .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .message {
+    display: flex;
+    gap: 12px;
+    max-width: 900px;
+    width: 100%;
+    align-self: flex-start;
+  }
+  .message.user { align-self: flex-end; flex-direction: row-reverse; }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .avatar.ai { background: var(--accent); color: #000; }
+  .avatar.user { background: var(--blue); color: #000; }
+
+  .bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    max-width: calc(100% - 44px);
+  }
+  .message.user .bubble {
+    background: var(--surface2);
+    border-color: var(--blue);
+  }
+
+  /* SQL block inside bubble */
+  .sql-block {
+    margin-top: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .sql-block-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text2);
+  }
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text2);
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn.copied { border-color: var(--green); color: var(--green); }
+
+  pre.sql-code {
+    padding: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: var(--text);
+    white-space: pre;
+  }
+
+  /* syntax highlight tokens */
+  .kw { color: #ff7b72; font-weight: 600; }
+  .fn { color: #d2a8ff; }
+  .str { color: #a5d6ff; }
+  .num { color: #f9bfaa; }
+  .cm { color: #8b949e; font-style: italic; }
+  .alias { color: #ffa657; }
+
+  /* thinking / loading */
+  .thinking {
+    display: flex;
+    gap: 4px;
+    padding: 14px 16px;
+    align-items: center;
+  }
+  .thinking span {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: bounce 1.2s infinite;
+    display: inline-block;
+  }
+  .thinking span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%,80%,100% { transform: scale(1); opacity: 0.5; }
+    40% { transform: scale(1.4); opacity: 1; }
+  }
+
+  /* ── Input Bar ── */
+  .input-area {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 14px 20px;
+    flex-shrink: 0;
+  }
+
+  .quick-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    resize: none;
+    outline: none;
+    min-height: 42px;
+    max-height: 120px;
+    line-height: 1.5;
+    transition: border-color 0.15s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text2); }
+
+  .send-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    width: 42px;
+    height: 42px;
+    cursor: pointer;
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+    flex-shrink: 0;
+  }
+  .send-btn:hover { background: var(--accent2); }
+  .send-btn:active { transform: scale(0.95); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+  /* welcome */
+  .welcome {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text2);
+  }
+  .welcome h2 { font-size: 20px; color: var(--text); margin-bottom: 8px; font-weight: 500; }
+  .welcome p { font-size: 13px; line-height: 1.7; }
+  .welcome .tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    margin: 2px;
+  }
+
+  /* table popup */
+  .col-popup {
+    position: fixed;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0;
+    min-width: 280px;
+    max-width: 340px;
+    max-height: 400px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .col-popup-header {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .col-popup-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+  .col-row {
+    display: flex;
+    gap: 8px;
+    padding: 5px 14px;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border);
+  }
+  .col-name { color: var(--blue); font-family: 'JetBrains Mono', monospace; min-width: 120px; }
+  .col-desc { color: var(--text2); }
+
+  .error-bubble {
+    color: var(--red);
+    font-size: 12px;
+    margin-top: 6px;
+  }
+
+  /* Image Upload */
+  #fileInput { display: none; }
+  .attach-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: 42px;
+    height: 42px;
+    cursor: pointer;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .attach-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .image-preview-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .image-preview-item {
+    position: relative;
+    display: inline-block;
+  }
+  .image-preview-item img {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .image-remove-btn {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .bubble img.user-img {
+    max-width: 240px;
+    max-height: 160px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: block;
+    margin-bottom: 6px;
+  }
+  .csv-preview-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--green);
+    margin-bottom: 6px;
+  }
+  .csv-preview-chip svg { flex-shrink: 0; }
+  .image-preview-item.csv-item img { display: none; }
+  .image-preview-item.csv-item .csv-thumb {
+    width: 72px;
+    height: 72px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--green);
+    font-family: 'JetBrains Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="3" stroke="#f0a500" stroke-width="2"/>
+      <path d="M7 8h10M7 12h6M7 16h8" stroke="#f0a500" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    Redash SQL Assistant
+  </div>
+  <span class="header-sub">Shuuumatu Worker DB · MySQL</span>
+</header>
+
+<div class="main">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">テーブル一覧</div>
+    <div class="schema-search">
+      <input type="text" id="tableSearch" placeholder="テーブルを検索…" oninput="filterTables(this.value)">
+    </div>
+    <div class="table-list" id="tableList"></div>
+  </aside>
+
+  <!-- Chat -->
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <h2>🛠 Redash SQL アシスタント</h2>
+        <p>Shuuumatu Worker のデータベースに精通した SQL エンジニアです。<br>
+        分析したいことを日本語で教えてください。<br>
+        Redash でそのまま実行できる MySQL クエリを生成します。</p>
+        <div style="margin-top:14px;">
+          <span class="tag">job_applications</span>
+          <span class="tag">contracts</span>
+          <span class="tag">projects</span>
+          <span class="tag">users</span>
+          <span class="tag">workers</span>
+          <span class="tag">staff_relationships</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="quick-chips" id="chips">
+        <div class="chip" onclick="useChip(this)">📊 今月の応募数をスタッフ別に集計</div>
+        <div class="chip" onclick="useChip(this)">🏢 稼働中の契約一覧（クライアント名・ワーカー名付き）</div>
+        <div class="chip" onclick="useChip(this)">✅ 今月の内定（offered_at）数をCS担当別に集計</div>
+        <div class="chip" onclick="useChip(this)">👤 直近30日で登録したユーザー一覧</div>
+        <div class="chip" onclick="useChip(this)">📈 月次の応募→書類通過→内定のファネル</div>
+      </div>
+      <div class="image-preview-area" id="imagePreviewArea"></div>
+      <div class="input-row">
+        <input type="file" id="fileInput" accept="image/*,.csv,text/csv" multiple onchange="handleFileSelect(this)">
+        <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="画像・CSVを添付">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
+        <textarea id="userInput" placeholder="例：先月の応募数を担当スタッフ別に集計してください（画像も添付できます）" rows="1"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Column popup -->
+<div class="col-popup" id="colPopup" style="display:none;">
+  <div class="col-popup-header" id="popupTitle"></div>
+  <div class="col-popup-list" id="popupCols"></div>
+</div>
+
+<script>
+// ── Schema Data ──
+const SCHEMA = {"accounts":{"account_number":"アカウント番号","account_source":"アカウントの情報元","account_type":"アカウントの種類","annual_revenue":"年間収益","billing_city":"請求先の市区町村","billing_country":"請求先の国名","billing_geocode_accuracy":"請求先の位置情報精度","billing_latitude":"請求先の緯度","billing_longitude":"請求先の経度","billing_postal_code":"請求先の郵便番号","billing_state":"請求先の都道府県","billing_street":"請求先の住所（番地）","cancelled_reason":"解約理由","cliant_type":"クライアントの種類","created_at":"作成日時","created_by_sfid":"作成者のSalesforceID","created_date":"作成日","custmer_lank":"顧客ランク","deleted_at":"削除日時","description":"説明文","fax":"FAX番号","id":"アカウントID","industry":"業種","is_dead_re_approach":"再アプローチ不可フラグ","is_deleted":"削除フラグ","name":"会社名","number_of_employees":"従業員数","phone":"電話番号","real_company_id":"実会社ID","sfid":"SalesforceのID","updated_at":"更新日時","website":"会社ウェブサイトURL"},"admin_users":{"created_at":"作成日時","email":"メールアドレス","id":"管理者ユーザーID","name":"管理者ユーザー名","slack_id":"SlackユーザーID","staff_id":"スタッフID","staff_type":"スタッフ種別","updated_at":"更新日時"},"attendances":{"created_at":"作成日時","ended_at":"終了日時","id":"出勤記録ID","operational_status":"稼働状況","started_at":"勤務開始日時","updated_at":"更新日時","work_id":"勤務ID"},"cancel_contracts":{"cancel_date":"解約日","contract_id":"契約ID","created_at":"作成日時","id":"解約契約ID","reason_detail":"理由詳細","reason_title":"理由タイトル","status":"状態","updated_at":"更新日時"},"clients":{"address":"住所","client_memo":"クライアントメモ","contact_email":"連絡用メールアドレス","contract_attributes_struct":"契約属性情報","created_at":"作成日時","email":"メールアドレス","id":"クライアントID","name":"クライアント名","name_kana":"クライアント名（カナ）","representative_name":"代表者名","updated_at":"更新日時","url":"クライアントURL"},"companies":{"created_at":"レコード作成日時","deleted_at":"削除日時（論理削除）","id":"会社ID（主キー）","name":"会社名","phone":"電話番号","rank":"会社ランク","updated_at":"レコード更新日時","website":"会社ウェブサイトURL"},"contracts":{"billing_model":"請求モデル種別","client_id":"クライアントID","concluded_at":"契約締結日時","created_at":"作成日時","end_date":"契約終了日","fee_model":"料金モデル種別","hash_id":"ハッシュID（識別子）","hourly_wage":"時間単価（時給）","id":"契約の一意識別子","is_test_account":"テストアカウントか","job_type":"業務種類","memo":"備考メモ","monthly_fee":"月額料金","status":"契約ステータス","updated_at":"更新日時","worker_id":"ワーカーID"},"entries":{"created_at":"作成日時","deleted_at":"削除日時","id":"エントリーID","project_id":"プロジェクトID","updated_at":"更新日時","user_id":"ユーザーID"},"first_interviews":{"channel":"面談実施チャネル","created_at":"作成日時","deleted_at":"削除日時（論理削除）","email":"メールアドレス","first_name":"名前（名）","first_name_kana":"名前のカナ（名）","hourly_fee":"希望時給","id":"面談レコードのID","interviewed_at":"面談実施日時","last_name":"名前（姓）","last_name_kana":"名前のカナ（姓）","memo":"面談メモ","personality_rank":"性格ランク","prefecture":"都道府県","staff_id":"担当スタッフID","tel":"電話番号","updated_at":"更新日時","user_id":"ユーザーID","utm_source_id":"流入元のUTMソースID","working_time":"勤務時間の種類"},"interviews":{"created_at":"作成日時","date":"面談日付","id":"レコードID","interview_category_id":"面談カテゴリID","memo":"メモ","method_type":"面談方法の種類","updated_at":"更新日時","worker_id":"ワーカーID"},"job_applications":{"accepted_at":"承諾日時","applied_at":"応募日時","contract_id":"契約ID","created_at":"作成日時","declined_at":"辞退日時","deleted_at":"削除日時","hourly_fee":"時給","id":"応募ID","interviewed_at":"面接実施日時","memo":"メモ","offered_at":"オファー日時","project_id":"プロジェクトID","recommended_at":"推薦日時","sent_at":"送信日時","staff_id":"スタッフID","start_date":"開始予定日","status":"応募ステータス","updated_at":"応募情報の更新日時","user_id":"応募者のユーザーID"},"job_application_status_update_logs":{"deleted_at":"削除日時","id":"レコードID","job_application_id":"応募ID","operator":"操作担当者","shuuumatu_admin_user_id":"管理者ユーザーID","status":"応募ステータス","timestamp":"更新日時"},"jobtypes":{"created_at":"職種登録日時","deleted_at":"削除日時（論理削除）","id":"職種ID","name":"職種名","slug":"職種のURL用識別子"},"keep_lists":{"created_at":"キープリスト登録日時","deleted_at":"削除日時（論理削除）","id":"キープリストID","project_id":"関連プロジェクトID","updated_at":"キープリスト更新日時","user_id":"ユーザーID"},"payment_notifications":{"bill_month":"請求対象の月","created_at":"作成日時","hash_id":"識別用ハッシュID","id":"通知の一意ID","status":"通知の状態","total_payment_price":"支払総額","transfer_date":"振込日","worker_id":"作業者のID"},"projects":{"category":"プロジェクトのカテゴリ","company_id":"関連会社のID","company_name":"会社名","created_at":"作成日時","deleted_at":"削除日時（論理削除）","fee":"報酬額","id":"プロジェクトのID","location":"勤務地","name":"プロジェクト名","published":"公開状態","published_at":"公開日時","status":"プロジェクトの状態","title":"プロジェクトタイトル","updated_at":"更新日時","working_time":"勤務時間"},"skills":{"created_at":"スキル登録日時","deleted_at":"スキル削除日時","id":"スキルの識別子","name":"スキル名","slug":"スキルのURL用識別子"},"staff_relationships":{"admin_user_id":"管理者ユーザーID","chargeable_id":"担当対象のID","chargeable_type":"担当対象のタイプ","created_at":"関係登録日時","id":"関係ID","staff_type":"スタッフ種別","updated_at":"関係更新日時"},"staffs":{"created_at":"スタッフ登録日時","deleted_at":"スタッフ削除日時","email":"スタッフメールアドレス","id":"スタッフID","name":"スタッフ名","staff_type":"スタッフの種別","updated_at":"更新日時"},"users":{"career_history":"職歴情報","channel":"登録経路","created_at":"登録日時","date_of_birth":"生年月日","deleted_at":"削除日時","email":"メールアドレス","experience":"職務経験年数","first_name":"名（ファーストネーム）","first_name_kana":"名のカナ表記","gender":"性別","id":"ユーザーID","last_name":"ユーザーの姓","last_name_kana":"ユーザーの姓（カナ）","memo":"ユーザーに関するメモ","name":"ユーザーの名前","prefecture":"居住都道府県","rank":"ユーザーのランク","resume":"履歴書・職務経歴書","tel":"電話番号","updated_at":"レコード更新日時","working_hours":"勤務時間帯","working_location":"勤務場所","working_time":"勤務時間数"},"workers":{"created_at":"作成日時","email":"メールアドレス","hash_id":"ハッシュ化された識別子","id":"ワーカーの一意ID","memo":"備考メモ","name":"氏名","name_kana":"氏名のカナ表記","status":"ワーカーの状態","tel":"電話番号","updated_at":"更新日時","user_id":"ユーザーID（外部キー）","worker_type":"ワーカー種別"},"works":{"contract_hash_id":"契約のハッシュID","created_at":"作成日時","hash_id":"ハッシュ化された識別子","id":"作業の一意ID","updated_at":"更新日時","work_year_month":"作業年月（YYYYMM）"}};
+
+const ALL_TABLES = Object.keys(SCHEMA);
+
+// ── System Prompt ──
+const SYSTEM_PROMPT = `あなたは「Shuuumatu Worker」サービスのデータベース構造を熟知した、Redash専門のSQLエンジニアです。
+
+ユーザーの要望に基づいて、Redashでそのまま実行可能なMySQL形式のSQLクエリを作成してください。
+
+## 絶対ルール
+- MySQL構文（DATE_FORMAT, TIMESTAMPDIFF, JSON_EXTRACT等）
+- テーブル結合時は必ず短いエイリアスを使用
+- 出力ヘッダー（AS）は日本語（例: u.name AS ユーザー名）
+- 主要な日付データのNULLチェックを厳密に
+- fee, hourly_fee, working_timeは文字列型なのでSUM/AVG不可。そのまま表示するか正規表現で数値抽出
+
+## ビジネスルール（必ず守る）
+- 応募数カウント: applied_at IS NOT NULL を条件に（created_atはスカウト等の自動レコードを含むため使わない）
+- 論理削除除外: 特段の指定がない限りWHERE deleted_at IS NULL
+- 企業への紹介済み（書類通過相当）: sent_at IS NOT NULL
+- 内定（オファー）の定義: offered_at IS NOT NULL
+- 有効な応募の抽出: WHERE deleted_at IS NULL AND applied_at IS NOT NULL
+
+## パフォーマンス最適化
+- 日付フィルタはカラムを関数で囲まず直接比較
+  良い例: WHERE created_at >= '2024-01-01 00:00:00'
+  悪い例: WHERE DATE_FORMAT(created_at, '%Y') = '2024'
+- データ量が膨大なため、全期間集計でも2020年〜に絞るかCTEでフィルタリング
+- LIKE検索は必ず日付絞り込みと併用
+
+## スタッフID対応表
+2:星耀介, 5:廣野るい子, 6:松村幸弥, 9:北井久也, 15:吉永尚由, 16:北澤克哉, 18:小川弘海, 20:常松秀直, 26:吉原朋輝, 31:藤本美紀, 34:小島莉奈, 36:桑原宏平, 57:井出圭亮, 65:水川由美, 68:関口麻衣, 70:土井磨輝, 84:田中倫太郎, 86:渡邊翔平, 91:小川真貴, 97:三本松英樹, 98:仲松香菜子, 104:東森友暉, 105:齋藤大樹, 110:西入広恵, 113:山口恵輔, 115:落合由佳, 116:大橋慎吾, 118:神山雄太郎, 120:炭谷小百合, 129:谷昌樹, 135:正生雄大, 136:中山恵太, 137:奥田美与, 140:斉田昇, 141:佐藤清美, 142:柳瑠璃子, 143:水出慎平, 144:沢口夏希, 145:鈴木陽子, 146:堤沙織, 147:津島里花子, 149:森将太, 150:川畑一也, 151:水上康彦, 152:古屋明日華, 153:藤原直哉, 155:坂本徹平, 156:濵田智子, 157:平野龍平, 158:松島桂子, 160:中園秀和, 162:鈴木亜紀, 163:濵本藤吾, 164:杉原大貴, 165:礒部一輝, 166:齋藤桃子, 167:西村盾一, 168:松本裕樹, 169:秋山日奈, 171:甲斐和基, 172:辻貴大, 173:徳井わか菜, 174:田中伸哉, 175:岩下さやか, 176:永末隆宏, 178:中川真里奈, 179:堀畑雅寛, 180:木村伊織, 181:村井涼夏, 182:笠井貴秀, 183:渡邊果奈, 184:中辻正裕, 185:片岡美皓, 186:前田夏奈子, 187:西村友也, 188:宮本愛, 189:今西香織, 190:菊田淳平, 191:小川恵莉香, 192:サンソーネ玲生, 193:沼田大樹, 194:下田雄貴, 195:水野裕介, 196:池田さや, 197:井上穂奈美, 198:内田風花, 199:沢田愛, 200:磯貝由佳, 201:高橋秀仁, 202:鶴渕竜也, 203:久保文恵, 204:平井菜々海, 205:大塚純己, 206:中村剛, 207:中又真衣子, 208:梶田直, 209:小堀良太, 210:伊佐優一, 211:鈴木瑞己
+
+名指し検索: admin_user_id = XX の形式を使用、name文字列検索は不可
+
+## 担当CC/AS/CS の正しい取得パターン（実績確認済み）
+
+| 担当 | chargeable_type | staff_type | 結合キー |
+|------|----------------|------------|---------|
+| 担当CC | ContractTerm | concierge | contract_termsの最新ID（MAX(id)）経由 |
+| 担当AS | Client | sales | clients.id |
+| 担当CS | Client | customer_success | clients.id |
+
+複数レコードがある場合はROW_NUMBER()で最新1件に絞ること：
+\`\`\`sql
+-- 最新のcontract_termを取得
+LEFT JOIN (
+  SELECT contract_id, MAX(id) AS max_ct_id
+  FROM contract_terms
+  GROUP BY contract_id
+) latest_ct ON latest_ct.contract_id = con.id
+-- 担当CC（ContractTerm単位 / concierge）
+LEFT JOIN (
+  SELECT sr.chargeable_id, au.name AS admin_name,
+         ROW_NUMBER() OVER (PARTITION BY sr.chargeable_id ORDER BY sr.updated_at DESC) AS rn
+  FROM staff_relationships sr
+  JOIN admin_users au ON au.id = sr.admin_user_id
+  WHERE sr.chargeable_type = 'ContractTerm'
+    AND sr.staff_type      = 'concierge'
+) cc ON cc.chargeable_id = latest_ct.max_ct_id AND cc.rn = 1
+-- 担当AS（Client単位 / sales）
+LEFT JOIN (
+  SELECT sr.chargeable_id, au.name AS admin_name,
+         ROW_NUMBER() OVER (PARTITION BY sr.chargeable_id ORDER BY sr.updated_at DESC) AS rn
+  FROM staff_relationships sr
+  JOIN admin_users au ON au.id = sr.admin_user_id
+  WHERE sr.chargeable_type = 'Client'
+    AND sr.staff_type      = 'sales'
+) as2 ON as2.chargeable_id = c.id AND as2.rn = 1
+-- 担当CS（Client単位 / customer_success）
+LEFT JOIN (
+  SELECT sr.chargeable_id, au.name AS admin_name,
+         ROW_NUMBER() OVER (PARTITION BY sr.chargeable_id ORDER BY sr.updated_at DESC) AS rn
+  FROM staff_relationships sr
+  JOIN admin_users au ON au.id = sr.admin_user_id
+  WHERE sr.chargeable_type = 'Client'
+    AND sr.staff_type      = 'customer_success'
+) cs ON cs.chargeable_id = c.id AND cs.rn = 1
+\`\`\`
+
+## worksテーブルの重要な仕様（実績確認済み）
+- work_year_month の形式は 'YYYY-MM'（例: '2026-03'）※INT型ではなくVARCHAR
+- 当月フィルタ: w.work_year_month = DATE_FORMAT(NOW(), '%Y-%m')
+- work_fix_flag = 0 が未確定、1 が確定
+
+## Bellリンクの正しいURL形式（実績確認済み）
+- CONCAT('https://bell.shuuumatu-worker.jp/admin/works/', w.id)
+- ※works.idを使う（contract_hash_idではない）
+
+## 自社レコードの除外（必須）
+- clients結合時は必ず AND c.name != '株式会社シューマツワーカー' を付ける
+
+## contracts.status
+1:稼働中, 2:終了済み, 3:準備中, 4:キャンセル
+
+## job_applications.status
+12:打診済み, 20:面談オファー済み, 18:開封済み, 13:エントリー意向獲得済み, 14:エントリー意向なし, 11:MD内保留, 40:初回面談案内送付済み, 50:初回面談予約済み, 60:MD見送り, 2:エントリー済み, 15:送付保留, 8:書類落ち, 3:面談調整中, 30:面談調整済み, 4:結果待ち, 9:面談落ち, 5:内定, 7:成約, 10:MD内保留後見送り, 17:送付保留後見送り
+
+## DB スキーマ（主要テーブル・カラム）
+${JSON.stringify(SCHEMA)}
+
+## 返答フォーマット
+1. 最初に要件の解釈と使用テーブルを1〜2文で説明
+2. SQLブロックを出力（\`\`\`sql〜\`\`\`で囲む）
+3. 必要に応じて補足説明（注意点・変更方法等）
+`;
+
+// ── State ──
+let conversation = [];
+let isLoading = false;
+let activePopup = null;
+let pendingImages = []; // {base64, mediaType, dataUrl}
+
+// ── Table List ──
+function renderTables(filter = '') {
+  const list = document.getElementById('tableList');
+  const tables = ALL_TABLES.filter(t => t.includes(filter.toLowerCase()));
+  list.innerHTML = tables.map(t =>
+    `<div class="table-item" onclick="showColumns('${t}', event)">${t}</div>`
+  ).join('');
+}
+
+function filterTables(v) { renderTables(v); }
+
+function showColumns(tableName, e) {
+  e.stopPropagation();
+  document.querySelectorAll('.table-item').forEach(el => el.classList.remove('active'));
+  e.target.classList.add('active');
+
+  const cols = SCHEMA[tableName];
+  if (!cols) return;
+
+  const popup = document.getElementById('colPopup');
+  document.getElementById('popupTitle').textContent = tableName;
+  const colList = document.getElementById('popupCols');
+  colList.innerHTML = Object.entries(cols).map(([col, desc]) =>
+    `<div class="col-row"><span class="col-name">${col}</span><span class="col-desc">${desc}</span></div>`
+  ).join('');
+
+  const rect = e.target.getBoundingClientRect();
+  popup.style.left = (rect.right + 8) + 'px';
+  popup.style.top = Math.min(rect.top, window.innerHeight - 420) + 'px';
+  popup.style.display = 'flex';
+  activePopup = popup;
+}
+
+document.addEventListener('click', (e) => {
+  if (activePopup && !activePopup.contains(e.target)) {
+    activePopup.style.display = 'none';
+    document.querySelectorAll('.table-item').forEach(el => el.classList.remove('active'));
+    activePopup = null;
+  }
+});
+
+// ── Chat ──
+function appendUserMessage(text, images) {
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+  const messages = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message user';
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar user';
+  avatar.textContent = 'U';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  images.forEach(item => {
+    if (item.type === 'image') {
+      const el = document.createElement('img');
+      el.src = item.dataUrl;
+      el.className = 'user-img';
+      bubble.appendChild(el);
+    } else if (item.type === 'csv') {
+      const chip = document.createElement('div');
+      chip.className = 'csv-preview-chip';
+      chip.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${item.name}`;
+      bubble.appendChild(chip);
+    }
+  });
+  if (text) {
+    const t = document.createElement('div');
+    t.textContent = text;
+    bubble.appendChild(t);
+  }
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function appendMessage(role, content) {
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const messages = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = `avatar ${role === 'user' ? 'user' : 'ai'}`;
+  avatar.textContent = role === 'user' ? 'U' : 'AI';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+
+  if (role === 'assistant') {
+    bubble.innerHTML = formatResponse(content);
+    bubble.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const code = btn.closest('.sql-block').querySelector('.sql-code').textContent;
+        // clipboard APIが使えない場合はtextareaで代替
+        const fallback = () => {
+          const ta = document.createElement('textarea');
+          ta.value = code;
+          ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          btn.textContent = '✓ コピー済み';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'コピー'; btn.classList.remove('copied'); }, 2000);
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(code).then(() => {
+            btn.textContent = '✓ コピー済み';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = 'コピー'; btn.classList.remove('copied'); }, 2000);
+          }).catch(fallback);
+        } else {
+          fallback();
+        }
+      });
+    });
+  } else {
+    bubble.textContent = content;
+  }
+
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+  return div;
+}
+
+function appendThinking() {
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const messages = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message assistant';
+  div.id = 'thinking';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar ai';
+  avatar.textContent = 'AI';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = '<div class="thinking"><span></span><span></span><span></span></div>';
+
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function removeThinking() {
+  const el = document.getElementById('thinking');
+  if (el) el.remove();
+}
+
+function formatResponse(text) {
+  // Split on SQL code blocks
+  const parts = text.split(/(```sql[\s\S]*?```)/g);
+  let html = '';
+  parts.forEach(part => {
+    if (part.startsWith('```sql')) {
+      const code = part.replace(/^```sql\s*/, '').replace(/```$/, '').trim();
+      html += `<div class="sql-block">
+        <div class="sql-block-header">
+          <span>MySQL</span>
+          <button class="copy-btn">コピー</button>
+        </div>
+        <pre class="sql-code">${highlightSQL(escapeHtml(code))}</pre>
+      </div>`;
+    } else if (part.trim()) {
+      html += `<div style="white-space:pre-wrap;">${escapeHtml(part).trim()}</div>`;
+    }
+  });
+  return html || `<div style="white-space:pre-wrap;">${escapeHtml(text)}</div>`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlightSQL(code) {
+  const keywords = /\b(SELECT|FROM|WHERE|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|ON|AS|AND|OR|NOT|IN|IS|NULL|ORDER BY|GROUP BY|HAVING|LIMIT|OFFSET|WITH|UNION|ALL|DISTINCT|CASE|WHEN|THEN|ELSE|END|COUNT|SUM|AVG|MAX|MIN|DATE_FORMAT|TIMESTAMPDIFF|JSON_EXTRACT|JSON_UNQUOTE|COALESCE|IFNULL|IF|CONCAT|DATE|NOW|CURDATE|YEAR|MONTH|DAY|BETWEEN|LIKE|DESC|ASC|INSERT|UPDATE|DELETE|CREATE|TABLE|INTO|VALUES|SET|BY|CTE|PARTITION|OVER|ROW_NUMBER|RANK|DENSE_RANK)\b/g;
+  return code
+    .replace(/--[^\n]*/g, m => `<span class="cm">${m}</span>`)
+    .replace(/'[^']*'/g, m => `<span class="str">${m}</span>`)
+    .replace(/\b\d+\b/g, m => `<span class="num">${m}</span>`)
+    .replace(keywords, m => `<span class="kw">${m}</span>`);
+}
+
+// ── Image Handling ──
+function handleFileSelect(input) {
+  const files = Array.from(input.files);
+  files.forEach(file => {
+    if (file.type.startsWith('image/')) {
+      // 画像ファイル
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        const base64 = dataUrl.split(',')[1];
+        pendingImages.push({ type: 'image', base64, mediaType: file.type, dataUrl, name: file.name });
+        renderImagePreviews();
+      };
+      reader.readAsDataURL(file);
+    } else if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+      // CSVファイル
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const csvText = e.target.result;
+        pendingImages.push({ type: 'csv', csvText, name: file.name });
+        renderImagePreviews();
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+  });
+  input.value = '';
+}
+
+function renderImagePreviews() {
+  const area = document.getElementById('imagePreviewArea');
+  area.innerHTML = pendingImages.map((item, i) => {
+    if (item.type === 'csv') {
+      return `<div class="image-preview-item csv-item">
+        <div class="csv-thumb">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>CSV</span>
+          <span style="font-size:9px;color:var(--text2);max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.name}</span>
+        </div>
+        <button class="image-remove-btn" onclick="removeImage(${i})">✕</button>
+      </div>`;
+    } else {
+      return `<div class="image-preview-item">
+        <img src="${item.dataUrl}" alt="${item.name}">
+        <button class="image-remove-btn" onclick="removeImage(${i})">✕</button>
+      </div>`;
+    }
+  }).join('');
+}
+
+function removeImage(idx) {
+  pendingImages.splice(idx, 1);
+  renderImagePreviews();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  const hasImages = pendingImages.length > 0;
+  if (!text && !hasImages || isLoading) return;
+
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+
+  const textToSend = text || '（画像を確認して、出力項目をCSV形式で出せるSQLを作成してください）';
+  const imagesToSend = [...pendingImages];
+
+  // ユーザーバブルに表示
+  appendUserMessage(textToSend, imagesToSend);
+
+  // APIメッセージのcontentを構築
+  const contentParts = [];
+  let csvContext = '';
+  imagesToSend.forEach(item => {
+    if (item.type === 'image') {
+      contentParts.push({
+        type: 'image',
+        source: { type: 'base64', media_type: item.mediaType, data: item.base64 }
+      });
+    } else if (item.type === 'csv') {
+      // CSVはテキストとして渡す（先頭20行まで）
+      const lines = item.csvText.split('\n').slice(0, 20).join('\n');
+      csvContext += `\n\n【添付CSV: ${item.name}】\n\`\`\`\n${lines}\n\`\`\``;
+    }
+  });
+  const fullText = textToSend + csvContext;
+  contentParts.push({ type: 'text', text: fullText });
+
+  conversation.push({ role: 'user', content: contentParts });
+
+  // 入力リセット
+  input.value = '';
+  autoResize(input);
+  pendingImages = [];
+  renderImagePreviews();
+
+  appendThinking();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM_PROMPT,
+        messages: conversation
+      })
+    });
+
+    const data = await res.json();
+    removeThinking();
+
+    if (data.error) throw new Error(data.error.message);
+
+    const reply = data.content.map(b => b.text || '').join('');
+    conversation.push({ role: 'assistant', content: reply });
+    appendMessage('assistant', reply);
+
+  } catch(err) {
+    removeThinking();
+    appendMessage('assistant', `⚠️ エラーが発生しました: ${err.message}`);
+  }
+
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function useChip(el) {
+  document.getElementById('userInput').value = el.textContent.replace(/^[^\s]+\s/, '');
+  document.getElementById('userInput').focus();
+  autoResize(document.getElementById('userInput'));
+}
+
+// ── Init ──
+renderTables();
+</script>
+</body>
+</html>
